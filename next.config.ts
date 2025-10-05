@@ -1,17 +1,11 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   eslint: {
-    // ⬇️ let the build succeed even if ESLint has errors
+    // Allow production builds to pass even if there are ESLint errors.
     ignoreDuringBuilds: true,
   },
 };
-
-// next.config.ts
-
-
-
-
 
 export default nextConfig;
