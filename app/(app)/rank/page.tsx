@@ -22,24 +22,29 @@ function todayISO() { return new Date().toISOString().slice(0,10); }
 /* --- Sortable row --- */
 function SortableRow({ id, index, name, onUp, onDown }: { id:string; index:number; name:string; onUp:()=>void; onDown:()=>void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style:any = {
+  const dragStyle:any = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? .8 : 1,
-    display:'flex', alignItems:'center', justifyContent:'space-between',
-    padding:12, border:'1px solid var(--border)', borderRadius:12, background:'#0e1318'
+    opacity: isDragging ? 0.9 : 1,
   };
-
+  
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <div><strong>{index+1}.</strong> {name}</div>
-      <div style={{display:'flex', gap:8}}>
-        <button className="btn secondary" onClick={onUp}  aria-label="Up">↑</button>
-        <button className="btn secondary" onClick={onDown} aria-label="Down">↓</button>
-        <span className="badge" style={{cursor:'grab'}}>⇅</span>
+    <div
+      ref={setNodeRef}
+      className="card row-card"
+      style={dragStyle}
+      {...attributes}
+      {...listeners}
+    >
+      <div><strong>{index + 1}.</strong> {name}</div>
+      <div style={{ display:'flex', gap:8 }}>
+        <button className="btn secondary" onClick={onUp}>↑</button>
+        <button className="btn secondary" onClick={onDown}>↓</button>
+        <span className="badge" style={{ cursor:'grab' }}>⇅</span>
       </div>
     </div>
   );
+  
 }
 
 export default function RankPage() {
