@@ -14,28 +14,24 @@ type Player = { id: string; name: string };
 type Week   = { id: string; week_date: string };
 
 const sb = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
-/* --- Sortable row --- */
-function SortableRow({ id, index, name, onUp, onDown }: { id:string; index:number; name:string; onUp:()=>void; onDown:()=>void }) {
+/* Row */
+function SortableRow({ id, index, name, onUp, onDown }:{
+  id:string; index:number; name:string; onUp:()=>void; onDown:()=>void
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const dragStyle:any = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.9 : 1,
   };
-  
   return (
-    <div
-      ref={setNodeRef}
-      className="card row-card"
-      style={dragStyle}
-      {...attributes}
-      {...listeners}
-    >
+    <div ref={setNodeRef} className="card row-card" style={dragStyle} {...attributes} {...listeners}>
       <div><strong>{index + 1}.</strong> {name}</div>
       <div style={{ display:'flex', gap:8 }}>
         <button className="btn secondary" onClick={onUp}>↑</button>
@@ -44,7 +40,6 @@ function SortableRow({ id, index, name, onUp, onDown }: { id:string; index:numbe
       </div>
     </div>
   );
-  
 }
 
 export default function RankPage() {
@@ -54,6 +49,7 @@ export default function RankPage() {
   const [week, setWeek]       = useState<Week|null>(null);
   const [canVote, setCanVote] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null); // NEW
   const [error, setError]     = useState<string|null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,21 +70,24 @@ export default function RankPage() {
         setIsAdmin(!!data);
       }
 
-      // ensure user has a player
+      // my player id (required)  // NEW
+      let myId: string | null = null;
       {
         const { data, error } = await supabase.from('players').select('id').eq('user_id', uid).maybeSingle();
         if (error && error.code !== 'PGRST116') { setError(error.message); setLoading(false); return; }
         if (!data) { setError('No player profile yet. Register with a display name.'); setLoading(false); return; }
+        myId = data.id; setMyPlayerId(myId);
       }
 
-      // players
+      // all players, but exclude me from the ballot list  // CHANGED
       const { data: p, error: perr } = await supabase.from('players').select('id,name').order('name');
       if (perr) { setError(perr.message); setLoading(false); return; }
-      const list = (p ?? []) as Player[];
+      const listAll = (p ?? []) as Player[];
+      const list = listAll.filter(x => x.id !== myId); // exclude self  // NEW
       setPlayers(list);
       setOrder(list.map(x=>x.id));
 
-      // this Monday or latest Monday
+      // find this Monday or latest Monday ≤ today
       const { data: wToday } = await supabase.from('weeks').select('id,week_date').eq('week_date', todayISO()).limit(1);
       let w:Week|null = wToday?.[0] ?? null;
       if (!w) {
@@ -98,13 +97,16 @@ export default function RankPage() {
         w = fb?.[0] ?? null;
       }
       setWeek(w);
-      setCanVote(!!(wToday && wToday.length>0));
+      setCanVote(!!(wToday && wToday.length>0)); // true only if today==a week row
 
-      // prefill
+      // prefill existing ballot and strip self if present (safety)  // NEW
       if (w) {
         const { data: r } = await supabase.from('rankings').select('rank_order')
           .eq('user_id', uid).eq('week_id', w.id).maybeSingle();
-        if (r?.rank_order) setOrder(r.rank_order as unknown as string[]);
+        if (r?.rank_order) {
+          const arr = (r.rank_order as unknown as string[]).filter(id => id !== myId);
+          setOrder(arr);
+        }
       }
 
       setLoading(false);
@@ -134,8 +136,11 @@ export default function RankPage() {
     const { data: ses } = await supabase.auth.getSession();
     const uid = ses!.session!.user.id;
 
+    // client-side safety: never include self  // NEW
+    const cleanOrder = order.filter(id => id !== myPlayerId);
+
     const { error: e } = await supabase.from('rankings').upsert(
-      { user_id: uid, week_id: week.id, rank_order: order },
+      { user_id: uid, week_id: week.id, rank_order: cleanOrder },
       { onConflict: 'user_id,week_id' }
     );
     setSubmitting(false);
@@ -154,9 +159,10 @@ export default function RankPage() {
         <>
           <p className="p-muted" style={{marginBottom:10}}>
             {week ? `Week of ${week.week_date} • ` : 'No active week found • '}
-            {canVote ? 'Voting is OPEN (CT).' : isAdmin ? 'Voting is CLOSED • Admin override enabled.' : 'Voting is CLOSED.'}
+            {canVote ? 'Voting is OPEN (CT).' : isAdmin ? 'Voting is CLOSED • Admin override enabled.' : 'Voting is CLOSED (preview only).'}
           </p>
 
+          {/* If you prefer to hide the list entirely when closed, wrap the block below in: (canVote || isAdmin) && (...) */}
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={order} strategy={verticalListSortingStrategy}>
               <div style={{display:'grid', gap:10}}>
